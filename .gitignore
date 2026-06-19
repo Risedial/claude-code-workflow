@@ -1,0 +1,14 @@
+# Generated artifacts from the workflow pipeline
+*-vision.md
+*-profile.json
+exec-*.md
+*_refined.md
+splits/
+seq-state.json
+
+# Auto-generated runner (created by /seq-init each time)
+.claude/commands/111111111111.md
+
+# OS
+.DS_Store
+Thumbs.db
