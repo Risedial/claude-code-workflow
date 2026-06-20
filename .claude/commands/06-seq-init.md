@@ -244,5 +244,5 @@ Your runner command is ready. Paste this into a fresh chat to begin:
   /111111111111
 
 Paste the same command into each subsequent fresh chat to advance one step at a time.
-To reset: delete $ARGUMENTS/seq-state.json and run /seq-init $ARGUMENTS again.
+To reset: delete $ARGUMENTS/seq-state.json and run /06-seq-init $ARGUMENTS again.
 ```

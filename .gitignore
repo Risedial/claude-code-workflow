@@ -4,6 +4,7 @@
 exec-*.md
 *_refined.md
 splits/
+_archived/
 seq-state.json
 
 # Auto-generated runner (created by /seq-init each time)

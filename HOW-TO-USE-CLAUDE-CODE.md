@@ -2,157 +2,170 @@
 
 ## The Process at a Glance
 
-**Brain dump → Analyze → Build Prompt → Refine → Split into Steps → Initialize Runner → Execute**
+**Brain dump → Intake (research + Q&A) → Extract Profile (JSON + vision) → Build Exec Prompt → Refine → Split into Steps → Initialize Runner → Execute**
 
 Each section below is numbered. Follow them in order. Do not skip steps. Fresh chat = clear the chat and open a new one.
 
 ---
 
-## STEP 1 — Write Your Brain Dump
+## STEP 1 — Run /01-intake
 
-Before opening Claude Code, write down everything you want to do. No structure needed. Voice notes, fragments, ideas, goals — all of it.
-
-Save it as a `.md` file. Example:
-
-```
-C:\Users\Alexb\My Drive\website-outreach-system\_User-sandbox\_June 19\raw-vision.md
-```
-
-You already have this file. Use it.
-
----
-
-## STEP 2 — Analyze the Draft
-
-**What this does:** Extracts real intent, goals, and structure from your raw brain dump. Produces two output files you'll use in Step 3.
+**What this does:** Researches your domain (4–8 web searches), extracts intent signals from your input, and asks you 4–10 targeted multiple-choice questions. Captures everything into a structured intake document. Nothing is interpreted yet — this step only gathers.
 
 **Command to type:**
 
 ```
-/intent:analyze-draft
+/01-intake [paste your raw idea, brain dump, or voice transcript here]
 ```
 
-**Then immediately paste** the full contents of your brain dump file below the command (copy-paste the text — do not use a file path argument for this one). Or type the argument path if the skill accepts it:
+Or from a file:
 
 ```
-/intent:analyze-draft C:\Users\Alexb\My Drive\website-outreach-system\_User-sandbox\_June 19\raw-vision.md
+/01-intake file:path/to/notes.md
 ```
 
-**Output files it creates (note these names):**
-- `[slug]-vision.md` — human-readable vision document
-- `[slug]-profile.json` — structured JSON context profile
+Or with prior chat history for context:
 
-The `[slug]` is auto-generated from your content (e.g., `facebook-dashboard-agentic-plan`). Look at what files were created in the working directory and note the exact filenames.
+```
+/01-intake ({path/to/chat-history.md}) [raw idea text]
+```
 
-**When done:** Note the two output file paths. Then **clear the chat and open a new one.**
+**What to expect:**
+1. Claude silently researches your domain (no output shown)
+2. A series of popup dialogs appear with multiple-choice questions — answer each one
+3. Claude writes the intake document to your working directory
+
+**Output file:** `[slug]-intake.md` — note the exact filename and path.
+
+**When done:** Clear the chat and open a new one.
+
+---
+
+## STEP 2 — Run /02-extract-profile
+
+**What this does:** Reads the intake document from Step 1 and maps its content to two output files — the JSON profile and the vision document. No research, no questions. Fast, focused extraction.
+
+**Command to type:**
+
+```
+/02-extract-profile [path-to-intake-file]
+```
+
+Example:
+
+```
+/02-extract-profile "C:\Users\Alexb\...\[slug]-intake.md"
+```
+
+**Output files:**
+- `[slug]-vision.md` — 5-section vision document
+- `[slug]-profile.json` — 14-key structured context profile
+
+Note both exact file paths.
+
+**When done:** Clear the chat and open a new one.
 
 ---
 
 ## STEP 3 — Build the Execution Prompt
 
-**What this does:** Takes the two files from Step 2 and produces a single self-contained execution prompt file ready to run in a fresh Claude session.
+**What this does:** Takes the two files from Step 2 and produces a single self-contained execution prompt file.
 
 **Command to type:**
 
 ```
-/intent:build-prompt [vision-file-path] [profile-file-path]
+/03-build-prompt [vision-file-path] [profile-file-path]
 ```
 
-Replace the placeholders with the actual file paths from Step 2. Example using the existing files in this folder:
+Example:
 
 ```
-/intent:build-prompt "C:\Users\Alexb\My Drive\website-outreach-system\_User-sandbox\_June 19\facebook-dashboard-agentic-plan-vision.md" "C:\Users\Alexb\My Drive\website-outreach-system\_User-sandbox\_June 19\facebook-dashboard-agentic-plan-profile.json"
+/03-build-prompt "[slug]-vision.md" "[slug]-profile.json"
 ```
 
-**Output file it creates:**
-- `exec-[slug].md` — the full execution prompt (e.g., `exec-facebook-dashboard-agentic-plan.md`)
+**Output:** `exec-[slug].md`
 
-Note the exact path of this file.
+Note the exact path.
 
-**When done: Clear the chat and open a new one.**
+**When done:** Clear the chat and open a new one.
 
 ---
 
-## STEP 4 — Refine the Prompt
+## STEP 4 — Run /04-refinep
 
 **What this does:** Takes the execution prompt from Step 3 and upgrades it to production-grade quality using Anthropic best practices. Output is a polished, self-contained `.md` prompt file.
 
 **Command to type:**
 
 ```
-/refinep [path-to-exec-file]
+/04-refinep [path-to-exec-file]
 ```
 
 Example:
 
 ```
-/refinep "C:\Users\Alexb\My Drive\website-outreach-system\_User-sandbox\_June 19\exec-facebook-dashboard-agentic-plan.md"
+/04-refinep "C:\Users\Alexb\...\exec-[slug].md"
 ```
 
-**Output file it creates:**
-- `[subject]_refined.md` in the root working directory — note its exact name and path.
+**Output file:** `[subject]_refined.md` — note its exact name and path.
 
-**When done: Clear the chat and open a new one.**
+**When done:** Clear the chat and open a new one.
 
 ---
 
-## STEP 5 — Split into Parallel/Sequential Batches
+## STEP 5 — Run /05-split-orc-v2
 
 **What this does:** Takes the refined prompt from Step 4 and decomposes it into numbered batch files inside a `splits/` folder. These batches are what gets executed step-by-step.
 
 **Command to type:**
 
 ```
-/split-orc-v2 [path-to-refined-prompt]
+/05-split-orc-v2 [path-to-refined-prompt]
 ```
 
 Example:
 
 ```
-/split-orc-v2 "C:\Users\Alexb\My Drive\website-outreach-system\[subject]_refined.md"
+/05-split-orc-v2 "C:\Users\Alexb\...\[subject]_refined.md"
 ```
-
-(Use whatever filename `refinep` produced in Step 4.)
 
 **Output folder it creates:**
+
 ```
 splits/[prompt-name-without-extension]/
-  ├── 01-PARALLEL.md  (or 01-[label].md for complex plans)
-  ├── 02-PARALLEL.md
+  ├── 01-[label].md
+  ├── 02-[label].md
   ├── ...
-  ├── [NN]-FINAL-SOLO.md
   └── README.md
 ```
 
 Note the **full absolute path** to the splits folder. You'll need it in Step 6.
 
-**When done: Clear the chat and open a new one.**
+**When done:** Clear the chat and open a new one.
 
 ---
 
-## STEP 6 — Initialize the Sequential Runner
+## STEP 6 — Run /06-seq-init
 
 **What this does:** Scans the splits folder from Step 5, builds a state-tracking file, and auto-generates a runner command (`/111111111111`) you'll use to execute each step one by one in fresh chats.
 
 **Command to type:**
 
 ```
-/seq-init [absolute-path-to-splits-folder]
+/06-seq-init [absolute-path-to-splits-folder]
 ```
 
 Example:
 
 ```
-/seq-init "C:\Users\Alexb\My Drive\website-outreach-system\splits\subject-refined"
+/06-seq-init "C:\Users\Alexb\...\splits\subject-refined"
 ```
 
-(Replace `subject-refined` with the actual folder name created in Step 5.)
-
 **Output files it creates:**
-- `splits/[folder]/seq-state.json` — tracks which steps are done/pending
+- `seq-state.json` — tracks which steps are done/pending
 - `.claude/commands/111111111111.md` — your runner command (auto-generated, no edits needed)
 
-**When done: Clear the chat and open a new one.**
+**When done:** Clear the chat and open a new one.
 
 ---
 
@@ -176,15 +189,16 @@ That's it. No arguments. No file paths.
 
 ---
 
-## Quick Reference — Commands in Order
+## Quick Reference Table
 
 | Step | Command | Argument |
 |------|---------|----------|
-| 2 | `/intent:analyze-draft` | Paste brain dump text (or file path) |
-| 3 | `/intent:build-prompt` | `[vision.md] [profile.json]` |
-| 4 | `/refinep` | `[exec-slug.md]` |
-| 5 | `/split-orc-v2` | `[subject_refined.md]` |
-| 6 | `/seq-init` | `[absolute path to splits folder]` |
+| 1 | `/01-intake` | Raw idea text or file:path |
+| 2 | `/02-extract-profile` | `[slug]-intake.md` |
+| 3 | `/03-build-prompt` | `[slug]-vision.md [slug]-profile.json` |
+| 4 | `/04-refinep` | `exec-[slug].md` |
+| 5 | `/05-split-orc-v2` | `[subject]_refined.md` |
+| 6 | `/06-seq-init` | absolute path to splits folder |
 | 7 | `/111111111111` | (no argument — repeat in fresh chats) |
 
 ---
@@ -192,6 +206,7 @@ That's it. No arguments. No file paths.
 ## Rules
 
 - **Every step runs in its own fresh chat.** Never chain steps in the same chat.
-- **Always note output file paths** before clearing a chat — you'll need them in the next step.
-- **Step 7 repeats** until all batches are complete. The state file tracks your progress automatically so you never lose your place.
+- **Always note output file paths** before clearing a chat — you need them in the next step.
+- **Step 7 repeats** until all batches complete. The state file tracks progress automatically.
+- The intake document (`[slug]-intake.md`) is your source of truth. Keep it. If something downstream looks wrong, it traces back to the intake.
 - If you want to pick up where you left off on a previous run, just open a fresh chat and type `/111111111111` — it reads the state file and resumes.
