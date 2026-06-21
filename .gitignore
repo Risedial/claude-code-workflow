@@ -7,8 +7,17 @@ splits/
 _archived/
 seq-state.json
 
-# Auto-generated runner (created by /seq-init each time)
+# Auto-generated runner (created by /cc-workflow each time)
 .claude/commands/111111111111.md
+
+# Auto-generated magic commands (created per-project by /cc-workflow)
+.claude/commands/[0-9]*-magic.md
+
+# Runtime state logs (created by setup-prompt.md at install time)
+logs/*.json
+
+# Pipeline intermediate files
+step-*.json
 
 # OS
 .DS_Store

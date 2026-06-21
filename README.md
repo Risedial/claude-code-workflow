@@ -1,200 +1,162 @@
-# claude-code-workflow
+﻿# claude-code-workflow
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Requires Claude Code](https://img.shields.io/badge/Requires-Claude%20Code-blueviolet)](https://claude.ai/code)
-[![Workflow Version](https://img.shields.io/badge/Workflow-v2.0-blue)](./HOW-TO-USE-CLAUDE-CODE.md)
+[![Workflow Version](https://img.shields.io/badge/Workflow-v3.0-blue)](./HOW-TO-USE-CLAUDE-CODE.md)
 
-**Turn a raw brain dump into fully executed work — without losing context or momentum.**
+**Turn any brain dump into a fully executed workflow with exactly two commands â€” in a self-improving system that never needs external dependencies.**
 
-Most AI-assisted development stalls at the same point: you have an idea, you write a rough prompt, the context window fills up, the model loses the thread, and you're back to square one. This framework solves that with a seven-command pipeline that takes your messy, unstructured thinking and systematically refines it into parallelizable, state-tracked execution — one clean step at a time.
-
-No more 10,000-token context bleed. No more re-explaining what you want. No more half-finished outputs.
+This repo transforms a 6-step Claude Code workflow pipeline into a fully automated, two-command experience. A parent agent spawns 6 subagents in deterministic sequence, passes each subagent's structured output to the next via files on disk, and completes the entire workflow in a single chat session â€” without the user touching any intermediate step.
 
 ---
 
-## Table of Contents
+## What the System Does
 
-- [Pipeline Overview](#pipeline-overview)
-- [Prerequisites](#prerequisites)
-- [Quick Start](#quick-start)
-- [Command Reference](#command-reference)
-- [How It Works](#how-it-works)
-- [File Structure](#file-structure)
-- [HOW-TO-USE Guide](#how-to-use-guide)
-- [Contributing](#contributing)
-- [License](#license)
+The cc-workflow-subagent-magic system has three interlocking components:
 
----
+### 1. Entry Point Command (`/cc-workflow`)
 
-## Pipeline Overview
+A global Claude Code command accessible from any workspace. You invoke it with any brain dump â€” a file path, a tag, or raw text. The parent agent spawns 6 subagents in sequence:
 
 ```
-  YOUR BRAIN
-  ─────────
-  "I want to
-   build a thing
-   that does..."
-        │
-        ▼
-  ┌───────────────┐
-  │  /01-intake   │  ──► [slug]-intake.md
-  │               │      (research + Q&A + signals, all explicit)
-  └───────────────┘
-          │
-          ▼
-  ┌───────────────┐
-  │ /02-extract-  │  ──► [slug]-vision.md
-  │ profile       │  ──► [slug]-profile.json
-  └───────────────┘
-          │
-          ▼
-  ┌───────────────┐
-  │ /03-build-    │  ──► exec-[slug].md
-  │ prompt        │      (self-contained execution prompt)
-  └───────────────┘
-          │
-          ▼
-  ┌───────────────┐
-  │ /04-refinep   │  ──► [subject]_refined.md
-  └───────────────┘
-          │
-          ▼
-  ┌───────────────┐      splits/[folder]/
-  │ /05-split-    │  ──► ├── 01-[name].md
-  │ orc-v2        │      ├── 02-[name].md
-  └───────────────┘      └── ...
-          │
-          ▼
-  ┌───────────────┐  ──► seq-state.json
-  │ /06-seq-init  │  ──► .claude/commands/111111111111.md
-  └───────────────┘
-          │
-          ▼  (repeat in fresh chat per step)
-  ┌───────────────┐
-  │ /111111111111 │  ──► executes one step
-  │   (repeat)    │
-  └───────────────┘
+brain dump
+    â”‚
+    â–¼
+[01] intake â†’ step-01-intake.json
+    â”‚
+    â–¼
+[02] extract-profile â†’ step-02-profile.json
+    â”‚                   [slug]-profile.json
+    â”‚                   [slug]-vision.md
+    â–¼
+[03] build-prompt â†’ step-03-prompt.json
+    â”‚               exec-[slug].md
+    â–¼
+[04] refinep â†’ step-04-refined.json
+    â”‚           [subject]_refined.md
+    â–¼
+[05] split-orc-v2 â†’ step-05-batches.json
+    â”‚               splits/[folder]/ (numbered batch files)
+    â–¼
+[06] seq-init â†’ step-06-runner.json
+                seq-state.json
+                .claude/commands/111111111111.md
+    â”‚
+    â–¼
+N-magic.md (written to project .claude/commands/)
 ```
 
+Each subagent writes its output to a named JSON file on disk. The parent reads the file path â€” not the full content â€” and passes it to the next subagent. This file-based handoff keeps the parent context window manageable across 6+ sequential calls.
+
+### 2. Magic Command (`/N-magic`)
+
+At the end of the `/cc-workflow` run, a numbered project-level magic command is written to your project's `.claude/commands/` directory (e.g., `1-magic.md`, `2-magic.md`). The number is collision-safe â€” the system enumerates existing magic files before assigning the next integer.
+
+Paste `/N-magic` into a fresh chat. The parent agent drives the `111111111111.md` runner via subagents, advancing one step at a time until all implementation artifacts are produced.
+
+### 3. Self-Iteration Audit Command (`/cc-audit`)
+
+A separate global command that lists all project-level magic commands via a multiple-choice question. It audits the execution history from `global-state-log.json`, produces a braindump file, and feeds it back into `/cc-workflow` â€” causing the system to analyze and improve itself.
+
+Before any file is modified during self-iteration, it is duplicated into a sequentially numbered archive folder. A JSON log maps each archived file to its execution run, timestamp, and before/after state.
+
 ---
 
-## Prerequisites
-
-- **[Claude Code CLI](https://claude.ai/code)** — installed and authenticated
-- **Claude Code subscription** — Pro or above (Max recommended for long execution chains)
-- **Node.js / Python** — depending on what your splits actually execute
-- A brain dump. A voice note transcript. A document you wrote at 2am. Anything works.
-
----
-
-## Quick Start
-
-Run these seven commands in order. Each one feeds the next.
+## The Two-Command Workflow
 
 ```bash
-# 1. Research domain, extract signals, ask clarifying questions
-/01-intake
+# Command 1 â€” in any Claude Code project chat:
+/cc-workflow [your brain dump, file path, or idea]
 
-# 2. Map intake document to JSON profile + vision document
-/02-extract-profile [slug]-intake.md
-
-# 3. Build a self-contained execution prompt from the vision + profile
-/03-build-prompt [slug]-vision.md [slug]-profile.json
-
-# 4. Refine the prompt to production-grade quality
-/04-refinep exec-[slug].md
-
-# 5. Decompose the refined prompt into parallelizable or sequential batch files
-/05-split-orc-v2 [subject]_refined.md
-
-# 6. Initialize state tracking and generate the runner command
-/06-seq-init splits/[folder]/
-
-# 7. Execute one step at a time — repeat in a fresh Claude chat each time
-/111111111111
+# Command 2 â€” in a fresh Claude Code chat:
+/N-magic
 ```
 
-After step 6, `/111111111111` is auto-generated. Repeat step 7 in a **fresh chat session** for each step until `seq-state.json` shows all steps complete.
+That is the entire user-facing interface. All 6 pipeline steps run automatically between the two commands.
 
 ---
 
-## Command Reference
+## Install via Setup Prompt
 
-| Command | Input | Output | What it does |
-|---|---|---|---|
-| `/01-intake [brain dump or file:path]` | Raw idea text, voice transcript, or file | `[slug]-intake.md` | Researches domain (4–8 web searches), extracts intent signals, asks 4–10 targeted clarifying Q&A questions. Captures all findings explicitly — no interpretation. |
-| `/02-extract-profile [intake-file-path]` | `[slug]-intake.md` from /01-intake | `[slug]-vision.md`, `[slug]-profile.json` | Maps intake document content to JSON profile (14-key schema) and vision document (5-section format). No research or Q&A — pure structured extraction. |
-| `/03-build-prompt [vision] [profile]` | `[slug]-vision.md` + `[slug]-profile.json` | `exec-[slug].md` | Assembles a self-contained, fully-specified execution prompt |
-| `/04-refinep [prompt-file]` | Any `.md` prompt file | `[subject]_refined.md` | Applies Anthropic prompt engineering best practices to make the prompt production-grade |
-| `/05-split-orc-v2 [refined-file]` | `[subject]_refined.md` | `splits/[folder]/` with numbered `.md` batch files | Decomposes the prompt into TYPE-A (parallel) or TYPE-B (sequential with checkpoints) execution units |
-| `/06-seq-init [splits-folder]` | Path to a numbered splits folder | `seq-state.json`, `.claude/commands/111111111111.md` | Scans splits, initializes state tracking, and generates the `/111111111111` runner command |
-| `/111111111111` | *(no arguments)* | Completed work + updated `seq-state.json` | Reads current state, executes exactly one step, and saves progress |
+1. Clone this repo to any local path:
+   ```bash
+   git clone https://github.com/[your-username]/claude-code-workflow
+   ```
 
-### Split Types
+2. Open any Claude Code chat.
 
-`/05-split-orc-v2` supports two execution models:
+3. Copy the entire contents of `setup-prompt.md` from the repo root.
 
-- **TYPE-A (Parallel generation)** — batches that can run simultaneously, e.g. writing copy for multiple pages at once
-- **TYPE-B (Sequential implementation)** — ordered steps with checkpoints, e.g. scaffold → implement → test → integrate
+4. Paste it into the chat.
+
+Claude will locate the global `.claude` folder dynamically, copy all system files, initialize the log files, and confirm success. Zero path inputs. Zero configuration choices. Works on any machine.
 
 ---
 
-## How It Works
+## How Magic Commands Work
 
-### The Core Problem This Solves
+Each `/cc-workflow` run generates one numbered magic command in your project's `.claude/commands/` directory. The numbering is sequential and collision-safe:
 
-Claude's context window is powerful but finite. When you try to execute a complex project in a single session, three things go wrong:
+- First run: `1-magic.md`
+- Second run on same project: `2-magic.md`
+- And so on â€” no overwrites, no collisions
 
-1. **Context bleed** — early decisions contaminate later ones as the window fills
-2. **Drift** — the model loses track of constraints defined 50 turns ago
-3. **Stall** — one failed step hangs the entire session
+The magic command uses the same parent-agent-plus-subagents architecture as the entry point. When you paste `/N-magic` in a fresh chat:
 
-### The Solution: One Step Per Fresh Chat
+1. The parent agent checks that `seq-state.json` and `111111111111.md` exist (halts with a clear diagnostic if either is missing)
+2. For each pending step in `seq-state.json`, it spawns one subagent
+3. Each subagent executes exactly one step of the runner
+4. After all steps complete, the parent reports the full artifact list
 
-This framework enforces a clean separation between *planning* and *execution*:
+---
 
-- **Steps 1–6** happen once, upfront. They are pure planning and decomposition.
-- **Step 7** (`/111111111111`) executes in a fresh chat every time.
+## How Self-Iteration Works
 
-Each fresh chat session:
-1. Reads `seq-state.json` to know exactly where it left off
-2. Loads only the single batch file it needs to execute
-3. Does the work
-4. Updates `seq-state.json` with the result
-5. Exits cleanly
+Run `/cc-audit` in a fresh chat at any time:
 
-No context from previous steps bleeds in. No 10,000-token preamble. Just the current step, done well.
+1. A multiple-choice list shows all magic commands in the current project
+2. You select which one to audit
+3. The system reads `global-state-log.json` for that command's execution history
+4. A braindump file is generated summarizing what worked, what failed, what changed
+5. The braindump is fed into `/cc-workflow` â€” the pipeline runs on the system itself
+6. A self-improvement sequence is generated and executed
+7. Every modified file is archived first; the archive log is updated
 
-### Why Three Commands Instead of One
+**First run behavior:** If `global-state-log.json` does not exist yet, the system initializes it with a baseline entry (run #1) and treats the first audit as a state-capture operation â€” no changes are proposed. Future runs compare against this baseline.
 
-The intake pipeline splits work across three focused sessions to avoid the two failure modes of the previous design:
+---
 
-1. **Inference from messy text** — the old `/intent:analyze-draft` had to guess intent from unstructured brain dumps. `/01-intake` instead does research and asks questions, so every value in the intake document is explicit — either directly stated or selected from a multiple-choice option.
+## Archive and State Log
 
-2. **Session dilution** — combining research + Q&A + JSON extraction + vision writing + exec prompt assembly in one session puts too many cognitive tasks in one context window, increasing the chance of phases being skipped or abbreviated.
+### Archive system
+- Location: `[repo]/archives/`
+- Structure: numbered folders per self-iteration run (`01/`, `02/`, `03/`...)
+- Rule: archived files are never modified â€” each run always creates a new archive folder
+- Purpose: full rollback capability without git or external services
 
-The three commands are:
-- **/01-intake**: Gather only. Research the domain, extract signals, ask questions, write everything down explicitly.
-- **/02-extract-profile**: Extract only. Read the intake document, map explicit content to JSON and vision formats. No research, no Q&A.
-- **/03-build-prompt**: Assemble only. Read vision + JSON, produce the execution prompt.
+### Archive log
+- Location: `[repo]/logs/archive-log.json`
+- Maps each archived file to: execution run ID, timestamp, before/after state
+- Never overwritten â€” only appended
 
-The intake document ([slug]-intake.md) is the source of truth for the whole pipeline. It stores Q&A answers verbatim with full option descriptions, research findings organized by category, and signals classified explicitly.
+### Global state log
+- Location: `[repo]/logs/global-state-log.json`
+- Accumulates cross-project self-iteration history indefinitely
+- Records what changed, what worked, and what regressed in each run
+- Used by `/cc-audit` to identify patterns across many iterations
 
-### The State Machine
+---
 
-`seq-state.json` is the source of truth for execution. It tracks:
-- Which steps exist
-- Which are complete
-- Which is next
-- Any outputs or artifacts from each step
+## Clarification Mode
 
-This means you can pause, resume days later, hand the project to someone else, or rerun a failed step — and the system always knows exactly where things stand.
+When you run `/cc-workflow`, the very first question the intake subagent asks is:
 
-### The Philosophy
+> "Do you want me to ask clarifying questions during this workflow?"
 
-> Decompose first. Execute serially. Never lose state.
+- **Yes:** The intake subagent runs web research and asks 4-10 targeted clarifying questions before writing the intake document. Best for complex or ambiguous goals.
+- **No:** All 6 subagent steps run with zero interactive pauses. Best when you want the full workflow to run hands-free.
 
-Complex work fails not because AI isn't capable, but because the interface between human intent and AI execution is lossy. This pipeline tightens that interface at every stage: intent extraction, prompt engineering, decomposition, and stateful execution.
+The clarification mode flag is written to `step-00-clarification-mode.json` and propagated to every downstream subagent. When mode = no, no subagent in the chain can trigger an interactive pause.
 
 ---
 
@@ -202,65 +164,71 @@ Complex work fails not because AI isn't capable, but because the interface betwe
 
 ```
 claude-code-workflow/
-├── HOW-TO-USE-CLAUDE-CODE.md          # Full step-by-step guide
-└── .claude/
-    └── commands/
-        ├── 01-intake.md               # Step 1: brain dump → intake document
-        ├── 02-extract-profile.md      # Step 2: intake → vision + profile
-        ├── 03-build-prompt.md         # Step 3: vision + profile → exec prompt
-        ├── 04-refinep.md              # Step 4: prompt → refined prompt
-        ├── 05-split-orc-v2.md         # Step 5: prompt → numbered batch files
-        ├── 06-seq-init.md             # Step 6: splits → state + runner
-        └── 111111111111.md            # Step 7: auto-generated runner (one step/chat)
-```
+â”œâ”€â”€ setup-prompt.md                    # One-paste installer
+â”œâ”€â”€ README.md                          # This file
+â”œâ”€â”€ HOW-TO-USE-CLAUDE-CODE.md          # Detailed guide
+â”œâ”€â”€ logs/
+â”‚   â”œâ”€â”€ archive-log.json               # Maps archived files to runs
+â”‚   â””â”€â”€ global-state-log.json          # Cross-project iteration history
+â”œâ”€â”€ archives/
+â”‚   â”œâ”€â”€ 01/                            # Archived files from iteration run 1
+â”‚   â”œâ”€â”€ 02/                            # Archived files from iteration run 2
+â”‚   â””â”€â”€ ...                            # Immutable â€” never modified after creation
+â””â”€â”€ .claude/
+    â””â”€â”€ commands/
+        â”œâ”€â”€ 01-intake.md               # Pipeline step 1
+        â”œâ”€â”€ 02-extract-profile.md      # Pipeline step 2
+        â”œâ”€â”€ 03-build-prompt.md         # Pipeline step 3
+        â”œâ”€â”€ 04-refinep.md              # Pipeline step 4
+        â”œâ”€â”€ 05-split-orc-v2.md         # Pipeline step 5
+        â””â”€â”€ 06-seq-init.md             # Pipeline step 6
 
-**Generated artifacts (not committed, gitignored by default):**
+Global .claude folder (installed by setup-prompt.md):
+~/.claude/commands/  (or %APPDATA%\Claude\commands\ on Windows)
+    â”œâ”€â”€ cc-workflow.md                 # Global entry point command
+    â”œâ”€â”€ cc-audit.md                    # Global self-iteration audit command
+    â”œâ”€â”€ 01-intake.md through 06-seq-init.md
 
-```
-[your-project]/
-├── [slug]-intake.md                   # Output of /intake
-├── [slug]-vision.md                   # Output of /extract-profile
-├── [slug]-profile.json                # Output of /extract-profile
-├── exec-[slug].md                     # Output of build-prompt
-├── [subject]_refined.md               # Output of refinep
-├── splits/
-│   └── [folder]/
-│       ├── 01-[step-name].md
-│       ├── 02-[step-name].md
-│       └── ...
-└── seq-state.json                     # Live execution state
+Per-project (generated at runtime):
+[project]/.claude/commands/
+    â”œâ”€â”€ 1-magic.md                     # Generated by first /cc-workflow run
+    â”œâ”€â”€ 2-magic.md                     # Generated by second run
+    â””â”€â”€ 111111111111.md                # Generated by 06-seq-init
+
+[project]/
+    â”œâ”€â”€ [slug]-intake.md               # Output of step 01
+    â”œâ”€â”€ [slug]-vision.md               # Output of step 02
+    â”œâ”€â”€ [slug]-profile.json            # Output of step 02
+    â”œâ”€â”€ exec-[slug].md                 # Output of step 03
+    â”œâ”€â”€ [subject]_refined.md           # Output of step 04
+    â”œâ”€â”€ splits/[folder]/               # Output of step 05
+    â””â”€â”€ seq-state.json                 # Output of step 06 (live execution state)
 ```
 
 ---
 
-## HOW-TO-USE Guide
+## Prerequisites
 
-The full annotated walkthrough lives in [`HOW-TO-USE-CLAUDE-CODE.md`](./HOW-TO-USE-CLAUDE-CODE.md). It covers:
-
-- When to use TYPE-A vs TYPE-B splits
-- How to handle a failed step
-- How to rerun a specific batch file manually
-- Tips for writing better brain dumps (better input = better output at every stage)
-- Common failure modes and how to recover
+- **[Claude Code CLI](https://claude.ai/code)** â€” installed and authenticated
+- **Claude Code subscription** â€” Pro or above (Max recommended for 6+ sequential subagent chains)
+- A brain dump. A voice note transcript. A document. Anything works.
 
 ---
 
 ## Contributing
 
-This framework is actively used and evolving. If you've built something on top of it, fixed an edge case, or have a command that belongs in this pipeline:
+This framework is actively used and self-improving. If you have improvements:
 
 1. Fork the repo
-2. Create a branch: `git checkout -b feature/your-command-name`
-3. Add your command to `.claude/commands/` with a clear header comment block
-4. Update the Command Reference table in this README
-5. Open a pull request with a description of what problem it solves
-
-Issues and discussions welcome. If something doesn't work as documented, file a bug — the pipeline should be reliable enough to trust.
+2. Create a branch: `git checkout -b feature/your-improvement`
+3. Make changes to `.claude/commands/`
+4. Update this README if the system behavior changes
+5. Open a pull request
 
 ---
 
 ## License
 
-MIT — see [LICENSE](./LICENSE).
+MIT â€” see [LICENSE](./LICENSE).
 
-Use it, fork it, ship it.
+Use it, fork it, improve it, ship it.

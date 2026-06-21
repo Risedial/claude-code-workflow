@@ -1,11 +1,11 @@
 ---
 name: intake
-description: "Step 1 of 3 in the enhanced intake pipeline. Takes any raw brain dump, voice note, or idea → researches the domain (4–8 web searches + deep fetches) → extracts intent signals → asks 4–10 targeted multiple-choice clarifying questions → writes a structured intake document capturing all findings explicitly. No interpretation happens here — only gathering. Feed the output to /extract-profile."
+description: "Step 1 of the cc-workflow pipeline. Takes any raw brain dump, voice note, or idea. FIRST asks whether the user wants clarifying questions (clarification mode). If mode=no, runs silent automated intake with zero interactive pauses. If mode=yes, researches the domain (4-8 web searches), extracts intent signals, asks 4-10 targeted clarifying questions, and writes a structured intake document. Writes clarification_mode to step-00-clarification-mode.json for all downstream subagents."
 argument-hint: "[optional: ({path/to/chat-history-file})] [raw idea, brain dump, or voice transcript — paste directly or pass file:path]"
 allowed-tools: WebSearch, WebFetch, AskUserQuestion, Write, Read, Edit
 ---
 
-You are executing the `/intake` command. Your single job is to gather: research the domain, extract signals from the raw input, ask clarifying questions, and write everything you learn into a structured document. You do not interpret, infer, or produce a vision document here. You capture.
+You are executing the `/intake` command as a subagent in the cc-workflow pipeline. Your job: gather intent signals, optionally ask clarifying questions, and write a structured intake document plus a clarification mode state file.
 
 ---
 
@@ -18,14 +18,38 @@ You are executing the `/intake` command. Your single job is to gather: research 
 - If RAW_INPUT is empty or whitespace after parsing: use AskUserQuestion to ask "Paste your raw idea, brain dump, voice note, or transcript."
 
 **Derive SLUG from RAW_INPUT:**
-1. Extract the 3–5 most semantically dense words (skip stop words: a, the, I, my, me, want, need, to, for, and, or, but, with, that, this, just, like, some, it, its, be, is, are, was, have, how, what, so)
+1. Extract the 3-5 most semantically dense words (skip stop words: a, the, I, my, me, want, need, to, for, and, or, but, with, that, this, just, like, some, it, its, be, is, are, was, have, how, what, so)
 2. If RAW_INPUT contains a proper noun (product name, project name, company name), make it the first word
 3. Lowercase, join with hyphens, strip all punctuation except hyphens
 4. Truncate to 40 characters maximum
 5. Collision rule: if [slug]-intake.md already exists, append -2, -3, etc.
 
-**Define output path:**
+**Define output paths:**
 INTAKE_FILE = [current working directory]/[slug]-intake.md
+CLARIFICATION_MODE_FILE = [current working directory]/step-00-clarification-mode.json
+INTAKE_JSON_FILE = [current working directory]/step-01-intake.json
+
+---
+
+## PHASE 0.5 — CLARIFICATION MODE GATE (NEW — runs before all other phases)
+
+Ask ONE question using AskUserQuestion:
+- question: "Do you want me to ask clarifying questions during this workflow?"
+- header: "Clarification Mode"
+- options:
+  - A) "Yes, ask me questions" — "I will run web research and ask 4-10 targeted questions before writing the intake document. Best for complex or ambiguous goals."
+  - B) "No, run automatically" — "I will proceed with zero interactive pauses. Best when you want the full workflow to run hands-free. Output quality may be lower for ambiguous inputs."
+- multiSelect: false
+
+If user selects A: set CLARIFICATION_MODE = "yes"
+If user selects B: set CLARIFICATION_MODE = "no"
+
+Write CLARIFICATION_MODE_FILE immediately:
+```json
+{"clarification_mode": "[CLARIFICATION_MODE]", "set_at": "[ISO8601 timestamp]"}
+```
+
+All downstream subagents MUST read this file before calling AskUserQuestion. If CLARIFICATION_MODE = "no", all downstream subagents MUST NOT call AskUserQuestion under any circumstances.
 
 ---
 
@@ -53,10 +77,13 @@ Store all as SIGNALS. Hold internally for use in Phases 2, 3, and 4.
 
 ---
 
-## PHASE 2 — DOMAIN RESEARCH (silent — no output shown to user)
+## PHASE 2 — DOMAIN RESEARCH
+
+If CLARIFICATION_MODE = "no": run 3 silent web searches only. Store findings as RESEARCH. Do not display any results.
+If CLARIFICATION_MODE = "yes": run full research per steps 2.1-2.4 below.
 
 **Step 2.1 — Identify search queries:**
-Based on RAW_INPUT and SIGNALS, derive 4–8 search queries that would return the most useful context. Prioritize:
+Based on RAW_INPUT and SIGNALS, derive 4-8 search queries. Prioritize:
 - What already exists that is similar to this idea?
 - What are standard implementation approaches in this domain?
 - What do practitioners commonly struggle with?
@@ -64,65 +91,56 @@ Based on RAW_INPUT and SIGNALS, derive 4–8 search queries that would return th
 - What constraints or compliance requirements apply?
 
 **Step 2.2 — Run searches:**
-Execute 4–8 WebSearch calls. For complex or specialized domains, use 6–8 searches. For clearly defined straightforward ideas, 4 searches is sufficient.
+Execute 4-8 WebSearch calls (3 if CLARIFICATION_MODE = "no").
 
 **Step 2.3 — Deep fetch:**
-For the 2–3 highest-signal search results, use WebFetch to extract page content.
+If CLARIFICATION_MODE = "yes": for the 2-3 highest-signal results, use WebFetch to extract page content.
 
 **Step 2.4 — Organize findings internally as RESEARCH:**
-- EXISTING_SOLUTIONS: tools, products, or approaches that already address this
-- STANDARD_APPROACHES: most common or established implementation patterns
-- KNOWN_CHALLENGES: what practitioners in this domain commonly struggle with
-- DOMAIN_VOCABULARY: technical terms to use accurately in questions and outputs
-- MISSING_SIGNALS: things the user likely doesn't know they should specify, surfaced by research
-
-If any search returns no useful results: note as "limited prior art in [area]" and continue. Do not block.
+- EXISTING_SOLUTIONS
+- STANDARD_APPROACHES
+- KNOWN_CHALLENGES
+- DOMAIN_VOCABULARY
+- MISSING_SIGNALS
 
 ---
 
 ## PHASE 3 — ROUND 1 CLARIFYING QUESTIONS
 
-Ask 4–6 questions using AskUserQuestion (one tool call per question). Use SIGNALS + RESEARCH findings to make each question sharp and each option meaningful.
+If CLARIFICATION_MODE = "no": SKIP this phase entirely. Do not call AskUserQuestion.
+If CLARIFICATION_MODE = "yes": ask 4-6 questions using AskUserQuestion (one tool call per question).
 
 Each question must follow these rules:
 - question field: a complete, unambiguous sentence ending with ?
-- header field: 1–3 word topic label
-- options field: 2–4 options, each with label and description that communicates a full cluster of implications (what choosing this means about their values, constraints, and intent)
+- header field: 1-3 word topic label
+- options field: 2-4 options, each with label and description
 - multiSelect: false
 
-Cover as many of these as apply:
-- Primary goal: what does success look like in concrete terms?
-- Scope: what is in and what is out?
-- Audience: who is this for?
-- Priority: what matters most — speed, depth, quality, simplicity, scale?
-- Top constraint: what is the most limiting factor?
-- Feared outcome: what would make this a failure?
-
-Use DOMAIN_VOCABULARY from RESEARCH to make options specific to this domain.
 Store all questions asked and answers received as QA_ROUND_1.
 
 ---
 
 ## PHASE 4 — ROUND 2 CLARIFYING QUESTIONS (conditional)
 
-Run this phase ONLY IF any of these are true after analyzing Round 1 answers:
-- A Round 1 answer introduced a new unknown not present in the original idea
-- A Round 1 answer contradicted the original idea or another Round 1 answer
-- A Round 1 answer revealed a critical decision point still unresolved
-- The combination of answers leaves a dimension ambiguous that would affect output
+If CLARIFICATION_MODE = "no": SKIP this phase entirely.
+If CLARIFICATION_MODE = "yes": run only if any of these are true after Round 1:
+- A Round 1 answer introduced a new unknown
+- A Round 1 answer contradicted the original idea
+- A Round 1 answer revealed a critical unresolved decision point
+- The combination of answers leaves a dimension ambiguous
 
 If none are true: skip Phase 4 and proceed to Phase 5.
-
-Ask 2–4 targeted questions using AskUserQuestion. Each question resolves exactly one specific unresolved item. Do not ask about anything already clarified in Round 1.
-Store as QA_ROUND_2.
+Ask 2-4 targeted questions. Store as QA_ROUND_2.
 
 ---
 
 ## PHASE 5 — WRITE INTAKE DOCUMENT
 
-Write INTAKE_FILE to disk. Create it blank first using the Write tool with empty content, then populate in sections using Edit tool calls.
+Write INTAKE_FILE to disk. Create blank first using Write tool, then populate using Edit.
 
-The intake document must use exactly this structure (write it verbatim with all section headers):
+If CLARIFICATION_MODE = "no" and the input is ambiguous: document the ambiguity in the Gaps and Open Questions section. Proceed with best-effort signal capture. Downstream subagents will adjust based on ambiguity flags.
+
+The intake document uses exactly this structure:
 
 ---
 
@@ -130,113 +148,132 @@ The intake document must use exactly this structure (write it verbatim with all 
 
 > Generated: [ISO 8601 timestamp]
 > Source: intake-v1
+> Clarification Mode: [yes/no]
 
 ---
 
 ## Original Input
 
-[Write the full RAW_INPUT cleaned of voice artifacts (filler words, repetition, fragments) but preserving 100% of intent, every stated detail, nuance, and constraint. Prose paragraphs. Do not add ideas not in the original.]
+[Full RAW_INPUT cleaned of voice artifacts but preserving 100% of intent.]
 
 ---
 
 ## Chat History Context
 
-[If CHAT_HISTORY_CONTEXT is not null: write a structured summary with subsections:
-### Prior Goals, ### Decisions Made, ### Artifacts Produced, ### Open Threads, ### Established Context
-If null: write "None provided."]
+[If CHAT_HISTORY_CONTEXT is not null: structured summary with subsections: ### Prior Goals, ### Decisions Made, ### Artifacts Produced, ### Open Threads, ### Established Context. If null: write "None provided."]
 
 ---
 
 ## Research Findings
 
 ### Existing Solutions
-[Bulleted list of tools, products, approaches that already address this domain or problem]
+[Bulleted list]
 
 ### Standard Approaches
-[Bulleted list of the most common or established ways to implement/achieve this]
+[Bulleted list]
 
 ### Known Challenges
-[Bulleted list of what practitioners in this domain commonly struggle with]
+[Bulleted list]
 
 ### Domain Vocabulary
-[Bulleted list of technical terms relevant to this domain, with brief definitions where non-obvious]
+[Bulleted list with brief definitions]
 
 ### Missing Context Signals
-[Bulleted list of things the user likely doesn't know to specify — surfaced by research as important but unmentioned in the input]
+[Bulleted list of things not specified but important]
 
 ---
 
 ## Signal Extraction
 
 ### Explicit Statements
-[Bulleted list — things directly and unambiguously stated in the original input. Labeled: EXPLICIT.]
+[Bulleted list labeled EXPLICIT.]
 
 ### Implied Intent
-[Bulleted list — things meant but not said directly. Each item labeled: INFERRED — [evidence basis].]
+[Bulleted list labeled INFERRED — [evidence basis].]
 
 ### Contradictions
-[Numbered list — each contradiction as: "States X in [location] but also states Y in [location]". If none: "None identified."]
+[Numbered list or "None identified."]
 
 ### Desire Signals
-[Bulleted list — exact phrases from the input that signal systematic or recurring intent: "always", "automatically", "never having to", etc. Quote the phrase, then state what it implies.]
+[Bulleted list — quote phrase, state implication.]
 
 ### Fear Signals
-[Bulleted list — exact phrases signaling pain points. Quote the phrase, then state what fear it reveals.]
+[Bulleted list — quote phrase, state fear.]
 
 ### Emotional Register
-[Single value from: frustrated / excited / uncertain / urgent / calm / overwhelmed. One sentence of evidence.]
+[Single value + one sentence of evidence.]
 
 ---
 
 ## Q&A Session
 
-[For each question asked in Phase 3 and Phase 4, write this exact format:]
+[If CLARIFICATION_MODE = "no": write "Clarification mode: no — Q&A skipped. All dimensions resolved from input signal and research only."]
 
-### Q[N]: [header topic from the question]
+[If CLARIFICATION_MODE = "yes": for each question asked in Phase 3 and Phase 4:]
+
+### Q[N]: [header topic]
 **Question:** [full question text]
 **Options:**
-- A) [label] — [full description as presented]
-- B) [label] — [full description as presented]
-- C) [label] — [full description as presented]
-[additional options if any]
+- A) [label] — [full description]
+- B) [label] — [full description]
 **Selected:** [letter]) [label] — [full description]
 
-[Write all questions from Round 1 first, then Round 2 if it ran. If Round 2 did not run, write: "Round 2: Not triggered — all critical dimensions resolved in Round 1."]
+[Round 2: Not triggered — OR list Round 2 questions in same format.]
 
 ---
 
 ## Synthesis
 
 ### Confirmed Facts
-[Numbered list. Each item is something now known with certainty — either directly stated or explicitly confirmed by a Q&A answer. Format: "[N]. [Fact statement] (Source: explicit statement / Q[N] answer)"]
+[Numbered list. Format: "[N]. [Fact] (Source: explicit statement / Q[N] answer)"]
 
 ### High-Confidence Inferences
-[Numbered list. Each item is something strongly implied but not explicitly confirmed. Format: "[N]. [Inference] (Evidence: [signal or research finding that supports this])"]
+[Numbered list. Format: "[N]. [Inference] (Evidence: [signal or research finding])"]
 
 ### Gaps and Open Questions
-[Numbered list. Things that remain unknown or ambiguous after research and Q&A. Format: "[N]. [What is unknown] — [impact if assumed incorrectly]"]
+[Numbered list. Format: "[N]. [What is unknown] — [impact if assumed incorrectly]"]
 
 ### Urgency and Trigger
-[Prose, 1–3 sentences. What caused this request, what the timeline appears to be, and any urgency signals detected.]
+[Prose, 1-3 sentences.]
 
 ---
 
-## PHASE 6 — COMPLETION REPORT
+## PHASE 6 — WRITE STEP-01 OUTPUT JSON
+
+Write INTAKE_JSON_FILE:
+```json
+{
+  "step": "01-intake",
+  "slug": "[slug]",
+  "intake_file": "[absolute path to INTAKE_FILE]",
+  "clarification_mode_file": "[absolute path to CLARIFICATION_MODE_FILE]",
+  "clarification_mode": "[CLARIFICATION_MODE]",
+  "confirmed_facts_count": [N],
+  "gaps_count": [N],
+  "completed_at": "[ISO8601 timestamp]"
+}
+```
+
+---
+
+## PHASE 7 — COMPLETION REPORT
 
 Display to user:
 - Intake file path
 - Slug
+- Clarification mode selected
 - Number of web searches run
-- Number of Q&A questions asked
+- Number of Q&A questions asked (0 if mode=no)
 - Number of confirmed facts
 - Number of gaps remaining
-- Next step: "/02-extract-profile [intake-file-path]"
+- step-01-intake.json path
+- Next step (handled by parent agent)
 
 ---
 
 ## COMMAND NOTES
 
-- Do not display research results or Q&A options in the chat beyond the AskUserQuestion popups
-- Do not produce a vision document or JSON profile — those are Command 2's job
-- Do not interpret or synthesize beyond what is explicitly captured in the Synthesis section
-- If a Q&A answer directly contradicts the original input, record both in Contradictions and note the conflict in Gaps
+- CLARIFICATION_MODE must be written to step-00-clarification-mode.json before any other file
+- If CLARIFICATION_MODE = "no": never call AskUserQuestion again after the initial mode question
+- Do not produce a vision document or JSON profile — those are step 02's job
+- If a Q&A answer directly contradicts the original input, record both in Contradictions and note in Gaps
