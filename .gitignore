@@ -6,7 +6,6 @@ exec-*.md
 splits/
 _archived/
 seq-state.json
-.gitignore
 
 # Auto-generated runner (created by /cc-workflow each time)
 .claude/commands/111111111111.md
