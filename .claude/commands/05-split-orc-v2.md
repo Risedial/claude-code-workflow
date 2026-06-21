@@ -48,7 +48,7 @@ Score the target prompt against five signals:
 **Signal 4**: Tasks include dedicated "verify" sub-steps alongside "execute" sub-steps. Fires if two or more such pairs exist.
 **Signal 5**: Tasks reference numbered external reference files (gap files, spec files) with specific numbered sections. Fires if two or more such references exist.
 
-**Scoring**: Signal 1 = 2 points, Signals 2-5 = 1 point each. Score ≤ 1 â†’ TYPE-A. Score â‰¥ 2 â†’ TYPE-B.
+**Scoring**: Signal 1 = 2 points, Signals 2-5 = 1 point each. Score ≤ 1 → TYPE-A. Score â‰¥ 2 → TYPE-B.
 
 Record: `PROMPT-TYPE: [TYPE-A / TYPE-B]` and signal scores.
 
@@ -61,7 +61,7 @@ Record: `PROMPT-TYPE: [TYPE-A / TYPE-B]` and signal scores.
 3. Completion report — filename of final report, or "none"
 4. In-progress write — does the prompt write "in_progress" to state file before task files? yes or no
 5. Quality gates — verification checklist present or absent?
-6. Hard dependencies — task requiring another task's written output as direct input. Record as: `Task M â†’ Task N`
+6. Hard dependencies — task requiring another task's written output as direct input. Record as: `Task M → Task N`
 7. Chain-of-thought phases — named processing phases? List with scope, or "none detected"
 
 ---
@@ -96,7 +96,7 @@ Quality gates: [present / absent]
 CoT phases detected: [list or "none"]
 Cross-references: [list or "none detected"]
 Hard dependencies: [list or "none detected"]
-Recommended split: ceil([N] / 4) = [X] â†’ clamped to 2-5 parallel batches
+Recommended split: ceil([N] / 4) = [X] → clamped to 2-5 parallel batches
 Batch 1: Tasks [list] â† SEND ALONE FIRST
 Batch 2: Tasks [list]
 ...
@@ -166,7 +166,7 @@ Follow same structure. Add MUST NOT recreate prior batch files block.
 Only executor with quality gate authority. Reads all task files, runs gates, writes completion report, updates state to complete.
 
 ### README — `README.md`
-Execution order: Batch 1 first alone â†’ remaining batches simultaneously â†’ SOLO last.
+Execution order: Batch 1 first alone → remaining batches simultaneously → SOLO last.
 
 ---
 
@@ -210,7 +210,7 @@ PLANNING COMPLETE | Batches: [N] | Reference files read: [M] | Target files read
 One per batch. Each includes: Step 0A prerequisite check (if prerequisites), Step 0B idempotency check, Step 1 atomic write, Step 2 verify, Step 3 write checkpoint JSON.
 
 ### TYPE-B FINAL-SOLO — `[NN]-FINAL-SOLO.md`
-Checkpoint sweep â†’ validation tests â†’ completion report.
+Checkpoint sweep → validation tests → completion report.
 
 ### README — `README.md`
 Execution order grouped by dependency tier.

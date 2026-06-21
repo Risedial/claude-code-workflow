@@ -22,23 +22,23 @@ A global Claude Code command accessible from any workspace. You invoke it with a
 brain dump
     │
     ▼
-[01] intake â†’ step-01-intake.json
+[01] intake → step-01-intake.json
     │
     ▼
-[02] extract-profile â†’ step-02-profile.json
+[02] extract-profile → step-02-profile.json
     │                   [slug]-profile.json
     │                   [slug]-vision.md
     ▼
-[03] build-prompt â†’ step-03-prompt.json
+[03] build-prompt → step-03-prompt.json
     │               exec-[slug].md
     ▼
-[04] refinep â†’ step-04-refined.json
+[04] refinep → step-04-refined.json
     │           [subject]_refined.md
     ▼
-[05] split-orc-v2 â†’ step-05-batches.json
+[05] split-orc-v2 → step-05-batches.json
     │               splits/[folder]/ (numbered batch files)
     ▼
-[06] seq-init â†’ step-06-runner.json
+[06] seq-init → step-06-runner.json
                 seq-state.json
                 .claude/commands/111111111111.md
     │
